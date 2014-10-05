@@ -26,7 +26,7 @@ class SQLMappableSpec extends FlatSpec {
     Foo.insert(new Foo("bar"))
     assert(1 == Foo.count)
 
-    assert("bar".equals(Foo.fetchAll(0).value))
+    assert("bar" == Foo.fetchAll(0).value)
   }
 
   "A Fetchable SQLMappable" should "be able to be fetched by its id" in {
@@ -36,7 +36,7 @@ class SQLMappableSpec extends FlatSpec {
     FooWithId.insert(new FooWithId(1, "bar"))
     assert(1 == FooWithId.count)
 
-    assert("bar".equals(FooWithId.fetch(1).get.value))
+    assert("bar" == FooWithId.fetch(1).get.value)
   }
 
   "A Mappable with AutoGeneratingIds" should "provide an id with which the inserted object can be retrieved" in {
@@ -48,7 +48,7 @@ class SQLMappableSpec extends FlatSpec {
 
     val fooId = FooWithAutoId.insert(foo)
     assert(FooWithAutoId.exists(fooId.get))
-    assert("bar".equals(FooWithAutoId.fetch(fooId.get).get.value))
+    assert("bar" == FooWithAutoId.fetch(fooId.get).get.value)
   }
 
   case class Foo(value: String)
