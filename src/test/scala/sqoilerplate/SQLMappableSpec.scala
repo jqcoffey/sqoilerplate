@@ -26,7 +26,7 @@ class SQLMappableSpec extends FlatSpec {
     Foo.insert(new Foo("bar"))
     assert(1 == Foo.count)
 
-    assert("bar" == Foo.fetchAll(0).value)
+    assert("bar" == Foo.fetchAll()(0).value)
   }
 
   "A Fetchable SQLMappable" should "be able to be fetched by its id" in {

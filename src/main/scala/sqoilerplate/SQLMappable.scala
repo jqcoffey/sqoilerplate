@@ -5,8 +5,6 @@ import scalikejdbc._
 /**
  * A class allowing objects to be mapped to a SQL DB.
  *
- * NOTE: Session handling is very basic (ie non-existent)!  You've been warned!
- *
  * Created by j.coffey on 26/09/14.
  */
 abstract class SQLMappable[T](implicit val poolName: Symbol = 'default) extends SQLSyntaxSupport[T] {
@@ -23,7 +21,7 @@ abstract class SQLMappable[T](implicit val poolName: Symbol = 'default) extends 
    * Creates the table as defined by the [[SQLMappable.createTableSql]] method.
    * @return
    */
-  def createTable = getDB localTx { implicit session =>
+  def createTable(implicit session: DBSession = NamedAutoSession(connectionPoolName)) = {
     sql"${createTableSql}".execute().apply()
   }
 
@@ -32,7 +30,7 @@ abstract class SQLMappable[T](implicit val poolName: Symbol = 'default) extends 
    * @param obj
    * @return always None
    */
-  def insert(obj: T): Option[Long] = getDB localTx { implicit session =>
+  def insert(obj: T)(implicit session: DBSession = NamedAutoSession(connectionPoolName)): Option[Long] = {
     insertSQL(obj).toSQL.executeUpdate.apply()
     None
   }
@@ -41,7 +39,7 @@ abstract class SQLMappable[T](implicit val poolName: Symbol = 'default) extends 
    * Fetches all objects in the table in whichever order the DB sees fit.
    * @return A list of objects.
    */
-  def fetchAll = getDB localTx { implicit session =>
+  def fetchAll(implicit session: DBSession = NamedAutoSession(connectionPoolName)) = {
     fetchSQLRoot.toSQL.map(rs => resultSet2Model(rs)).list.apply()
   }
 
@@ -49,13 +47,11 @@ abstract class SQLMappable[T](implicit val poolName: Symbol = 'default) extends 
    * Provides the count of objects in the table.
    * @return
    */
-  def count: Long = getDB readOnly { implicit session =>
+  def count(implicit session: DBSession = NamedAutoSession(connectionPoolName)) = {
     countSQLRoot.toSQL.map(rs => rs.long(1)).single.apply().get
   }
 
   override def connectionPoolName = poolName
-
-  protected def getDB = NamedDB(connectionPoolName)
 
   protected lazy val tableAlias = syntax(tableAliasName)
 
@@ -93,7 +89,7 @@ trait Fetchable[T <: Identifiable] extends SQLMappable[T] {
    * @param id
    * @return
    */
-  def fetch(id: Long): Option[T] = getDB readOnly { implicit session =>
+  def fetch(id: Long)(implicit session: DBSession = NamedAutoSession(connectionPoolName)): Option[T] = {
     fetchSQLRoot.where.eq(column.id, id).toSQL.map(rs => resultSet2Model(rs)).single.apply()
   }
 
@@ -102,7 +98,7 @@ trait Fetchable[T <: Identifiable] extends SQLMappable[T] {
    * @param id
    * @return
    */
-  def exists(id: Long): Boolean = getDB readOnly { implicit session =>
+  def exists(id: Long)(implicit session: DBSession = NamedAutoSession(connectionPoolName)) = {
     countSQLRoot.where.eq(column.id, id).toSQL
       .map(rs => rs.long(1))
       .single.apply().get > 0
@@ -120,8 +116,8 @@ trait AutoGeneratingIds[T <: Identifiable] extends SQLMappable[T] {
    * @param obj
    * @return the key for use in later fetching
    */
-  override def insert(obj: T) = getDB localTx {
-    implicit session => Some(
+  override def insert(obj: T)(implicit session: DBSession = NamedAutoSession(connectionPoolName)) = {
+    Some(
       insertSQL(obj).toSQL.updateAndReturnGeneratedKey.apply()
     )
   }

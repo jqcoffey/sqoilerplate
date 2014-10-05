@@ -3,7 +3,7 @@ sqoilerplate
 
 Sqoilerplate saves you from writing redundant code to use RDBMs.  It's built on top of scalikejdbc and is explicitly not an ORM (it does not manage relations between objects!).
 
-This is barebones and doesn't do certain things one might want to back a complex application (like provide proper transaction support).  Since this is just a toy for my personal use this is not currently a problem.  You've been warned.
+This is barebones and probably has bugs.  You've been warned.
 
 Setup a class:
 ```
@@ -27,8 +27,28 @@ object Foo extends Fetchable[Foo] {
 }
 ```
 
+Ensure the proper config in resources/application.conf:
+```
+# JDBC settings
+db.test.driver="org.h2.Driver"
+db.test.url="jdbc:h2:mem:test"
+db.test.user="sa"
+db.test.password=""
+
+# Connection Pool settings
+db.test.poolInitialSize=5
+db.test.poolMaxSize=7
+db.test.poolConnectionTimeoutMillis=1000
+db.test.poolValidationQuery="select 1 as one"
+db.test.poolFactoryName="commons-dbcp"
+```
+
 And now use it
 ```
+implicit val poolName: 'test
+
+DBs.setup(poolName)
+
 Foo.insert(new Foo(1, "bar"))
 
 val foo = Foo.fetch(1)
