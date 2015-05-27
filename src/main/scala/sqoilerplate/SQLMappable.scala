@@ -7,40 +7,43 @@ import scalikejdbc._
  *
  * Created by j.coffey on 26/09/14.
  */
-abstract class SQLMappable[T](implicit val poolName: Symbol = 'default) extends SQLSyntaxSupport[T] {
+abstract class SQLMappable[T](val tableAliasName: String)(implicit val poolName: Symbol) extends SQLSyntaxSupport[T] {
 
-  protected val tableAliasName: String
+  val tableAlias = syntax(tableAliasName)
 
+  def resultSet2Model: WrappedResultSet => T
+
+  def model2NamedValues: T => Seq[(SQLSyntax, Any)]
+
+  override def connectionPoolName = poolName
+
+  /**
+   * SQL for generating the table representing this model.
+   * @return
+   */
   protected def createTableSql: SQLSyntax
-
-  protected def resultSet2Model(from: WrappedResultSet): T
-
-  protected def model2NamedValues(from: T): Seq[(SQLSyntax, Any)]
 
   /**
    * Creates the table as defined by the [[SQLMappable.createTableSql]] method.
    * @return
    */
   def createTable(implicit session: DBSession = NamedAutoSession(connectionPoolName)) = {
-    sql"${createTableSql}".execute().apply()
+    sql"$createTableSql".execute().apply()
   }
 
   /**
    * Inserts the object into the database.
-   * @param obj
-   * @return always None
+   * @param obj the object to insert
    */
-  def insert(obj: T)(implicit session: DBSession = NamedAutoSession(connectionPoolName)): Option[Long] = {
-    insertSQL(obj).toSQL.executeUpdate.apply()
-    None
-  }
+  def insert(obj: T)(implicit session: DBSession = NamedAutoSession(connectionPoolName)): Unit =
+    insertSQL(obj).toSQL.executeUpdate().apply()
 
   /**
    * Fetches all objects in the table in whichever order the DB sees fit.
    * @return A list of objects.
    */
   def fetchAll(implicit session: DBSession = NamedAutoSession(connectionPoolName)) = {
-    fetchSQLRoot.toSQL.map(rs => resultSet2Model(rs)).list.apply()
+    fetchSQLRoot.toSQL.map(rs => resultSet2Model(rs)).list().apply()
   }
 
   /**
@@ -48,19 +51,15 @@ abstract class SQLMappable[T](implicit val poolName: Symbol = 'default) extends 
    * @return
    */
   def count(implicit session: DBSession = NamedAutoSession(connectionPoolName)) = {
-    countSQLRoot.toSQL.map(rs => rs.long(1)).single.apply().get
+    countSQLRoot.toSQL.map(rs => rs.long(1)).single().apply().get
   }
-
-  override def connectionPoolName = poolName
-
-  protected lazy val tableAlias = syntax(tableAliasName)
 
   /**
    * An insert fragment requiring a session.
-   * @param obj
+   * @param obj the object to insert
    * @return
    */
-  protected def insertSQL(obj: T) = scalikejdbc.insert.into(this).namedValues(model2NamedValues(obj): _*)
+  private[sqoilerplate] def insertSQL(obj: T): InsertSQLBuilder = scalikejdbc.insert.into(this).namedValues(model2NamedValues(obj): _*)
 
   /**
    * A select * fragment requiring a session to which an optional predicate or ordering can be added.
@@ -78,51 +77,50 @@ abstract class SQLMappable[T](implicit val poolName: Symbol = 'default) extends 
 /**
  * A trait that allows retrieval of specific objects (eg via their primary key).
  *
- * NOTE: keys must be of type Long.
- *
- * @tparam T
  */
-trait Fetchable[T <: Identifiable] extends SQLMappable[T] {
+trait FetchableEntities[ID, T <: Identifiable[ID]] { self: SQLMappable[T] =>
 
   /**
-   * Fetches an object with the supplied id.
-   * @param id
+   * Fetches an object with the supplied key.
+   * @param id the object's id
    * @return
    */
-  def fetch(id: Long)(implicit session: DBSession = NamedAutoSession(connectionPoolName)): Option[T] = {
-    fetchSQLRoot.where.eq(column.id, id).toSQL.map(rs => resultSet2Model(rs)).single.apply()
+  def fetch(id: ID)(implicit session: DBSession = NamedAutoSession(connectionPoolName)): Option[T] = {
+    fetchSQLRoot.where.eq(column.id, id).toSQL.map(rs => resultSet2Model(rs)).single().apply()
   }
 
   /**
    * Determines the existence of an object in the table.
-   * @param id
+   * @param id the object's id
    * @return
    */
   def exists(id: Long)(implicit session: DBSession = NamedAutoSession(connectionPoolName)) = {
     countSQLRoot.where.eq(column.id, id).toSQL
       .map(rs => rs.long(1))
-      .single.apply().get > 0
+      .single().apply().get > 0
   }
 }
 
 /**
  * For use with tables that generate their own keys.
- * @tparam T
+ * 
+ * NOTE: key types must be [[Long]]s
+ * 
+ * @tparam T the model's type
  */
-trait AutoGeneratingIds[T <: Identifiable] extends SQLMappable[T] {
+trait AutoGeneratingIds[T <: Identifiable[Long]] { self: SQLMappable[T] =>
 
   /**
-   * An insert that should return a valid key for the inserted object.
-   * @param obj
+   * An insert that will return a valid key for the inserted object.
+   * 
+   * @param obj the object to insert
    * @return the key for use in later fetching
    */
-  override def insert(obj: T)(implicit session: DBSession = NamedAutoSession(connectionPoolName)) = {
-    Some(
-      insertSQL(obj).toSQL.updateAndReturnGeneratedKey.apply()
-    )
+  def insertAndReturnId(obj: T)(implicit session: DBSession = NamedAutoSession(connectionPoolName)): Long = {
+    insertSQL(obj).toSQL.updateAndReturnGeneratedKey().apply()
   }
 }
 
-trait Identifiable {
-  def id: Long
+trait Identifiable[K] {
+  def id: K
 }
